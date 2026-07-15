@@ -1,0 +1,144 @@
+<Window x:Class="LargeFileEditor.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="大型資料檔案編輯工具 - 第二階段"
+        Height="840"
+        Width="1220"
+        MinHeight="740"
+        MinWidth="1040">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Button x:Name="SelectFileButton" Grid.Column="0" Width="100" Height="32" Margin="0,0,8,0" Content="選擇檔案" Click="SelectFileButton_Click" />
+                <Button x:Name="RescanButton" Grid.Column="1" Width="100" Height="32" Margin="0,0,8,0" Content="重新掃描" Click="RescanButton_Click" IsEnabled="False" />
+                <TextBox x:Name="FilePathTextBox" Grid.Column="2" Height="32" IsReadOnly="True" VerticalContentAlignment="Center" />
+
+                <TextBlock Grid.Column="3" Text="分隔符號" VerticalAlignment="Center" Margin="12,0,6,0" />
+                <ComboBox x:Name="DelimiterComboBox" Grid.Column="4" Width="130" Height="32" SelectionChanged="DelimiterComboBox_SelectionChanged">
+                    <ComboBoxItem Content="逗號 (,)" Tag="," IsSelected="True" />
+                    <ComboBoxItem Content="Tab" Tag="&#x09;" />
+                    <ComboBoxItem Content="分號 (;)" Tag=";" />
+                    <ComboBoxItem Content="自訂" Tag="custom" />
+                </ComboBox>
+                <TextBox x:Name="CustomDelimiterTextBox" Grid.Column="5" Width="48" Height="32" Margin="6,0,0,0" MaxLength="1" IsEnabled="False" />
+                <CheckBox x:Name="HasHeaderCheckBox" Grid.Column="6" Margin="12,0,0,0" VerticalAlignment="Center" Content="第一列是欄位標題" IsChecked="True" />
+                <Button x:Name="CancelButton" Grid.Column="7" Width="80" Height="32" Margin="12,0,0,0" Content="取消" Click="CancelButton_Click" IsEnabled="False" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" x:Name="FileNameTextBlock" Text="檔案名稱：-" Margin="0,0,12,8" />
+                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="FileSizeTextBlock" Text="檔案大小：-" Margin="0,0,12,8" />
+                <TextBlock Grid.Row="0" Grid.Column="2" x:Name="CreatedAtTextBlock" Text="建立時間：-" Margin="0,0,12,8" />
+                <TextBlock Grid.Row="0" Grid.Column="3" x:Name="ModifiedAtTextBlock" Text="最後修改：-" Margin="0,0,0,8" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" x:Name="EncodingTextBlock" Text="文字編碼：-" Margin="0,0,12,8" />
+                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="NewLineTextBlock" Text="換行格式：-" Margin="0,0,12,8" />
+                <TextBlock Grid.Row="1" Grid.Column="2" x:Name="DelimiterTextBlock" Text="分隔符號：-" Margin="0,0,12,8" />
+                <TextBlock Grid.Row="1" Grid.Column="3" x:Name="HeaderTextBlock" Text="標題列：-" Margin="0,0,0,8" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" x:Name="RowsIncludingHeaderTextBlock" Text="資料列數（含標題）：-" Margin="0,0,12,8" />
+                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="DataRowsTextBlock" Text="資料列數（不含標題）：-" Margin="0,0,12,8" />
+                <TextBlock Grid.Row="2" Grid.Column="2" x:Name="FieldCountTextBlock" Text="欄位數：-" Margin="0,0,12,8" />
+                <TextBlock Grid.Row="2" Grid.Column="3" x:Name="StatusTextBlock" Text="狀態：尚未選擇檔案" Margin="0,0,0,8" />
+
+                <StackPanel Grid.Row="3" Grid.ColumnSpan="4" Orientation="Horizontal">
+                    <ProgressBar x:Name="ProgressBar" Width="420" Height="18" Minimum="0" Maximum="100" />
+                    <TextBlock x:Name="ProgressTextBlock" Margin="12,0,0,0" VerticalAlignment="Center" Text="0 / 0 bytes (0.00%)，邏輯列 0" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,12,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="欄位標題清單" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ListView x:Name="ColumnsListView">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="欄位位置" Width="90" DisplayMemberBinding="{Binding Position}" />
+                                <GridViewColumn Header="欄位索引" Width="90" DisplayMemberBinding="{Binding Index}" />
+                                <GridViewColumn Header="欄位標題" Width="330" DisplayMemberBinding="{Binding Header}" />
+                                <GridViewColumn Header="同名欄位" Width="90" DisplayMemberBinding="{Binding IsDuplicate}" />
+                                <GridViewColumn Header="空白標題" Width="90" DisplayMemberBinding="{Binding IsBlank}" />
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="1" BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="6" Padding="12">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="操作紀錄" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ListBox x:Name="LogListBox" />
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="3" BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,12,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="130" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="要刪除的資料列：" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox x:Name="DeleteRowNumberTextBox" Grid.Row="0" Grid.Column="1" Height="30" VerticalContentAlignment="Center" />
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="輸出檔案：" VerticalAlignment="Center" Margin="12,0,6,0" />
+                <TextBox x:Name="OutputPathTextBox" Grid.Row="0" Grid.Column="3" Height="30" VerticalContentAlignment="Center" />
+                <Button x:Name="BrowseOutputButton" Grid.Row="0" Grid.Column="4" Width="80" Height="30" Margin="8,0,0,0" Content="瀏覽" Click="BrowseOutputButton_Click" IsEnabled="False" />
+                <Button x:Name="DeleteRowButton" Grid.Row="0" Grid.Column="5" Width="110" Height="30" Margin="8,0,0,0" Content="刪除資料列" Click="DeleteRowButton_Click" IsEnabled="False" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="6" Margin="0,8,0,0" Text="列號從 1 開始；若第一列是欄位標題，刪除列號預設指資料內容列，不包含標題列。第二階段僅支援另存新檔。" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

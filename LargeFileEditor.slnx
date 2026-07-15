@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="LargeFileEditor.App/LargeFileEditor.App.csproj" />
+  <Project Path="LargeFileEditor.Core/LargeFileEditor.Core.csproj" />
+  <Project Path="LargeFileEditor.Tests/LargeFileEditor.Tests.csproj" />
+</Solution>

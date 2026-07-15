@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+.idea/
+.agents/
+.codex/
+*.user
+*.suo
+*.rsuser
+TestResults/
+LargeFileEditor.Tests/bin/**/TestData/
+outputs/
+work/
