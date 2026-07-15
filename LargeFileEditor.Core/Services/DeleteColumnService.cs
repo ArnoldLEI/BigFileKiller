@@ -25,6 +25,8 @@ public sealed class DeleteColumnService
             throw new InvalidOperationException("第三階段僅支援另存新檔，輸出路徑不可與原始檔相同。原始檔未被修改。");
         }
 
+        FileReplacementService.EnsureAvailableSpace(outputFullPath, inputInfo.Length);
+
         int deleteIndex = ResolveDeleteIndex(request);
         string deletedName = ResolveDeletedName(request, deleteIndex);
         long rowsWritten = 0;

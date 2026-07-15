@@ -25,6 +25,8 @@ public sealed class DeleteRowService
             throw new InvalidOperationException("第二階段僅支援另存新檔，輸出路徑不可與原始檔相同。原始檔未被修改。");
         }
 
+        FileReplacementService.EnsureAvailableSpace(outputFullPath, inputInfo.Length);
+
         long targetLogicalRecord = request.HasHeader ? request.DataRowNumber + 1 : request.DataRowNumber;
         long currentRecord = 0;
         long deletedRows = 0;

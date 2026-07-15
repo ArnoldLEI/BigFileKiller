@@ -28,7 +28,9 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Duplicate header requires position", TestDuplicateHeaderRequiresPosition),
     ("Duplicate header can delete selected position", TestDuplicateHeaderByPosition),
     ("Delete column preserves quoted CSV output", TestDeleteColumnQuotesOutput),
-    ("Cancel column delete removes incomplete output", TestDeleteColumnCancellation)
+    ("Cancel column delete removes incomplete output", TestDeleteColumnCancellation),
+    ("Replace original keeps backup", TestReplaceOriginalKeepsBackup),
+    ("Replace original can delete backup", TestReplaceOriginalDeletesBackup)
 };
 
 int failed = 0;
@@ -339,6 +341,45 @@ static async Task TestDeleteColumnCancellation()
     Assert(operation.Canceled, "Operation should report cancellation.");
     Assert(!File.Exists(output), "Incomplete output should be removed.");
     AssertEqual(before, await File.ReadAllTextAsync(input));
+}
+
+static async Task TestReplaceOriginalKeepsBackup()
+{
+    string original = await WriteTempAsync("A,B\r\n1,2\r\n", new UTF8Encoding(false));
+    string temp = NextTempPath();
+    await File.WriteAllTextAsync(temp, "A,B\r\n3,4\r\n", new UTF8Encoding(false));
+
+    var result = new FileReplacementService().ReplaceOriginal(new LargeFileEditor.Core.Models.FileReplacementRequest
+    {
+        OriginalFilePath = original,
+        CompletedTempFilePath = temp,
+        KeepBackup = true
+    });
+
+    Assert(result.Succeeded, "Replacement should succeed.");
+    AssertEqual("A,B\r\n3,4\r\n", await File.ReadAllTextAsync(original));
+    string backup = Path.Combine(Path.GetDirectoryName(original)!, $"{Path.GetFileNameWithoutExtension(original)}.backup{Path.GetExtension(original)}");
+    Assert(File.Exists(backup), "Backup file should exist.");
+    AssertEqual("A,B\r\n1,2\r\n", await File.ReadAllTextAsync(backup));
+}
+
+static async Task TestReplaceOriginalDeletesBackup()
+{
+    string original = await WriteTempAsync("A,B\r\n1,2\r\n", new UTF8Encoding(false));
+    string temp = NextTempPath();
+    await File.WriteAllTextAsync(temp, "A,B\r\n3,4\r\n", new UTF8Encoding(false));
+
+    var result = new FileReplacementService().ReplaceOriginal(new LargeFileEditor.Core.Models.FileReplacementRequest
+    {
+        OriginalFilePath = original,
+        CompletedTempFilePath = temp,
+        KeepBackup = false
+    });
+
+    Assert(result.Succeeded, "Replacement should succeed.");
+    AssertEqual("A,B\r\n3,4\r\n", await File.ReadAllTextAsync(original));
+    string backup = Path.Combine(Path.GetDirectoryName(original)!, $"{Path.GetFileNameWithoutExtension(original)}.backup{Path.GetExtension(original)}");
+    Assert(!File.Exists(backup), "Backup file should be deleted.");
 }
 
 static Task<LargeFileEditor.Core.Models.OperationResult> DeleteRowAsync(

@@ -147,9 +147,10 @@
                 <Button x:Name="DeleteColumnButton" Grid.Row="1" Grid.Column="7" Width="110" Height="30" Margin="8,8,0,0" Content="刪除欄位" Click="DeleteColumnButton_Click" IsEnabled="False" />
 
                 <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="8" Orientation="Horizontal" Margin="0,8,0,0">
+                    <CheckBox x:Name="ReplaceOriginalCheckBox" Content="完成後取代原始檔" Margin="0,0,18,0" Checked="ReplaceOriginalCheckBox_Changed" Unchecked="ReplaceOriginalCheckBox_Changed" />
                     <CheckBox x:Name="IgnoreCaseCheckBox" Content="標題比對忽略英文大小寫" Margin="0,0,18,0" />
                     <CheckBox x:Name="TrimHeaderWhitespaceCheckBox" Content="忽略標題前後空白" Margin="0,0,18,0" />
-                    <TextBlock Text="列號從 1 開始；若第一列是欄位標題，刪除列號指資料內容列。欄位位置從第 1 欄開始；同名欄位必須指定位置。" />
+                    <TextBlock Text="預設另存新檔；取代原始檔會先建立 .backup 備份。欄位位置從第 1 欄開始；同名欄位必須指定位置。" />
                 </StackPanel>
             </Grid>
         </Border>

@@ -11,6 +11,7 @@ public partial class MainWindow : Window
     private readonly FileAnalysisService _fileAnalysisService = new();
     private readonly DeleteRowService _deleteRowService = new();
     private readonly DeleteColumnService _deleteColumnService = new();
+    private readonly FileReplacementService _fileReplacementService = new();
     private CancellationTokenSource? _currentOperation;
     private FileAnalysisResult? _currentResult;
 
@@ -31,20 +32,16 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) == true)
         {
             FilePathTextBox.Text = dialog.FileName;
-            OutputPathTextBox.Text = GenerateDefaultOutputPath(dialog.FileName, "delete-row");
+            OutputPathTextBox.Text = GenerateDefaultOutputPath(dialog.FileName, "output");
             await StartScanAsync(dialog.FileName);
         }
     }
 
-    private async void RescanButton_Click(object sender, RoutedEventArgs e)
-    {
-        await StartScanAsync(FilePathTextBox.Text);
-    }
-
-    private void CancelButton_Click(object sender, RoutedEventArgs e)
-    {
-        _currentOperation?.Cancel();
-    }
+    private async void RescanButton_Click(object sender, RoutedEventArgs e) => await StartScanAsync(FilePathTextBox.Text);
+    private void CancelButton_Click(object sender, RoutedEventArgs e) => _currentOperation?.Cancel();
+    private async void DeleteRowButton_Click(object sender, RoutedEventArgs e) => await DeleteSingleRowAsync();
+    private async void DeleteColumnButton_Click(object sender, RoutedEventArgs e) => await DeleteColumnAsync();
+    private void ReplaceOriginalCheckBox_Changed(object sender, RoutedEventArgs e) => SetBusy(false);
 
     private void DelimiterComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
@@ -84,16 +81,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void DeleteRowButton_Click(object sender, RoutedEventArgs e)
-    {
-        await DeleteSingleRowAsync();
-    }
-
-    private async void DeleteColumnButton_Click(object sender, RoutedEventArgs e)
-    {
-        await DeleteColumnAsync();
-    }
-
     private async Task StartScanAsync(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -113,15 +100,13 @@ public partial class MainWindow : Window
         SetBusy(true);
         AddLog("開始掃描檔案");
 
-        var progress = new Progress<ProgressInfo>(UpdateProgress);
-
         try
         {
             var result = await _fileAnalysisService.AnalyzeAsync(
                 filePath,
                 delimiter,
                 HasHeaderCheckBox.IsChecked == true,
-                progress,
+                new Progress<ProgressInfo>(UpdateProgress),
                 _currentOperation.Token);
 
             _currentResult = result;
@@ -170,12 +155,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        EnsureOutputPath("delete-row");
-
+        string finalTarget = _currentResult.FilePath;
+        string outputPath = GetOperationOutputPath("delete-row");
         var request = new DeleteRowRequest
         {
             InputFilePath = _currentResult.FilePath,
-            OutputFilePath = OutputPathTextBox.Text,
+            OutputFilePath = outputPath,
             Delimiter = _currentResult.Delimiter,
             Encoding = _currentResult.Encoding,
             HasHeader = _currentResult.HasHeader,
@@ -190,8 +175,10 @@ public partial class MainWindow : Window
 
         try
         {
-            var progress = new Progress<ProgressInfo>(UpdateProgress);
-            OperationResult operation = await _deleteRowService.DeleteSingleRowAsync(request, progress, _currentOperation.Token);
+            OperationResult operation = await _deleteRowService.DeleteSingleRowAsync(
+                request,
+                new Progress<ProgressInfo>(UpdateProgress),
+                _currentOperation.Token);
 
             if (operation.Canceled)
             {
@@ -200,23 +187,18 @@ public partial class MainWindow : Window
                 return;
             }
 
-            AddLog($"刪除完成，輸出檔案：{operation.OutputFilePath}");
+            string scanPath = CompleteOutputMode(operation.OutputFilePath, finalTarget);
+            AddLog($"刪除完成，輸出檔案：{scanPath}");
             AddLog($"檔案大小變化：{FileAnalysisService.FormatFileSize(operation.OriginalSizeBytes)} -> {FileAnalysisService.FormatFileSize(operation.NewSizeBytes)}");
-
-            OutputPathTextBox.Text = GenerateDefaultOutputPath(operation.OutputFilePath, "delete-row");
-            await StartScanAsync(operation.OutputFilePath);
+            OutputPathTextBox.Text = GenerateDefaultOutputPath(scanPath, "output");
+            await StartScanAsync(scanPath);
             AddLog($"重新掃描完成，目前共 {_currentResult?.DataRows:N0} 筆資料");
         }
-        catch (OperationCanceledException)
-        {
-            StatusTextBlock.Text = "狀態：刪除已取消";
-            AddLog("刪除資料列已取消，原始檔未被修改");
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             StatusTextBlock.Text = "狀態：刪除失敗";
             AddLog($"刪除失敗：{ex.Message}");
-            MessageBox.Show(this, $"刪除失敗：{ex.Message}\n\n原始檔未被修改。", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, $"刪除失敗：{ex.Message}\n\n原始檔未被修改或已嘗試恢復。", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -257,22 +239,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (zeroBasedColumnIndex is null)
+        if (zeroBasedColumnIndex is null && FindHeaderMatches(header).Count > 1)
         {
-            var matches = FindHeaderMatches(header);
-            if (matches.Count > 1)
-            {
-                MessageBox.Show(this, "存在多個同名欄位，請在清單中選取實際欄位或輸入欄位位置。", "同名欄位", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+            MessageBox.Show(this, "存在多個同名欄位，請在清單中選取實際欄位或輸入欄位位置。", "同名欄位", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
         }
 
-        EnsureOutputPath("delete-column");
-
+        string finalTarget = _currentResult.FilePath;
+        string outputPath = GetOperationOutputPath("delete-column");
         var request = new DeleteColumnRequest
         {
             InputFilePath = _currentResult.FilePath,
-            OutputFilePath = OutputPathTextBox.Text,
+            OutputFilePath = outputPath,
             Delimiter = _currentResult.Delimiter,
             Encoding = _currentResult.Encoding,
             HasHeader = _currentResult.HasHeader,
@@ -286,14 +264,14 @@ public partial class MainWindow : Window
         _currentOperation?.Dispose();
         _currentOperation = new CancellationTokenSource();
         SetBusy(true);
-        AddLog(zeroBasedColumnIndex is null
-            ? $"開始刪除欄位「{header}」"
-            : $"開始刪除第 {zeroBasedColumnIndex.Value + 1:N0} 欄");
+        AddLog(zeroBasedColumnIndex is null ? $"開始刪除欄位「{header}」" : $"開始刪除第 {zeroBasedColumnIndex.Value + 1:N0} 欄");
 
         try
         {
-            var progress = new Progress<ProgressInfo>(UpdateProgress);
-            OperationResult operation = await _deleteColumnService.DeleteColumnAsync(request, progress, _currentOperation.Token);
+            OperationResult operation = await _deleteColumnService.DeleteColumnAsync(
+                request,
+                new Progress<ProgressInfo>(UpdateProgress),
+                _currentOperation.Token);
 
             if (operation.Canceled)
             {
@@ -302,28 +280,80 @@ public partial class MainWindow : Window
                 return;
             }
 
+            string scanPath = CompleteOutputMode(operation.OutputFilePath, finalTarget);
             AddLog($"欄位刪除完成：第 {operation.DeletedColumnIndex.GetValueOrDefault() + 1:N0} 欄 {operation.DeletedColumnName}");
             AddLog($"檔案大小變化：{FileAnalysisService.FormatFileSize(operation.OriginalSizeBytes)} -> {FileAnalysisService.FormatFileSize(operation.NewSizeBytes)}");
-
-            OutputPathTextBox.Text = GenerateDefaultOutputPath(operation.OutputFilePath, "delete-column");
-            await StartScanAsync(operation.OutputFilePath);
+            OutputPathTextBox.Text = GenerateDefaultOutputPath(scanPath, "output");
+            await StartScanAsync(scanPath);
             AddLog($"重新掃描完成，目前共 {_currentResult?.FieldCount:N0} 個欄位");
         }
-        catch (OperationCanceledException)
-        {
-            StatusTextBlock.Text = "狀態：刪除欄位已取消";
-            AddLog("刪除欄位已取消，原始檔未被修改");
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             StatusTextBlock.Text = "狀態：刪除欄位失敗";
             AddLog($"刪除欄位失敗：{ex.Message}");
-            MessageBox.Show(this, $"刪除欄位失敗：{ex.Message}\n\n原始檔未被修改。", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, $"刪除欄位失敗：{ex.Message}\n\n原始檔未被修改或已嘗試恢復。", "錯誤", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
             SetBusy(false);
         }
+    }
+
+    private string GetOperationOutputPath(string operationName)
+    {
+        if (_currentResult is null)
+        {
+            throw new InvalidOperationException("尚未完成掃描。");
+        }
+
+        if (ReplaceOriginalCheckBox.IsChecked == true)
+        {
+            return FileReplacementService.CreateTempPathBesideOriginal(_currentResult.FilePath, operationName);
+        }
+
+        if (string.IsNullOrWhiteSpace(OutputPathTextBox.Text))
+        {
+            OutputPathTextBox.Text = GenerateDefaultOutputPath(_currentResult.FilePath, operationName);
+        }
+
+        return OutputPathTextBox.Text;
+    }
+
+    private string CompleteOutputMode(string completedOutputPath, string originalPath)
+    {
+        if (ReplaceOriginalCheckBox.IsChecked != true)
+        {
+            return completedOutputPath;
+        }
+
+        var confirm = MessageBox.Show(
+            this,
+            "即將以處理完成的檔案取代原始檔。程式會先將原始檔改名為 .backup 檔。是否繼續？",
+            "確認取代原始檔",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (confirm != MessageBoxResult.Yes)
+        {
+            AddLog($"使用者取消取代原始檔，處理結果保留於暫存檔：{completedOutputPath}");
+            return completedOutputPath;
+        }
+
+        var keepBackup = MessageBox.Show(
+            this,
+            "取代成功後是否保留備份檔？",
+            "備份檔",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+        OperationResult replacement = _fileReplacementService.ReplaceOriginal(new FileReplacementRequest
+        {
+            OriginalFilePath = originalPath,
+            CompletedTempFilePath = completedOutputPath,
+            KeepBackup = keepBackup
+        });
+        AddLog(replacement.Message);
+        return replacement.OutputFilePath;
     }
 
     private IReadOnlyList<ColumnInfo> FindHeaderMatches(string header)
@@ -355,7 +385,7 @@ public partial class MainWindow : Window
         CustomDelimiterTextBox.IsEnabled = !isBusy && GetSelectedDelimiterTag() == "custom";
         HasHeaderCheckBox.IsEnabled = !isBusy;
         CancelButton.IsEnabled = isBusy;
-        BrowseOutputButton.IsEnabled = !isBusy && hasResult;
+        BrowseOutputButton.IsEnabled = !isBusy && hasResult && ReplaceOriginalCheckBox.IsChecked != true;
         DeleteRowButton.IsEnabled = !isBusy && hasResult;
         DeleteRowNumberTextBox.IsEnabled = !isBusy && hasResult;
         DeleteColumnButton.IsEnabled = !isBusy && hasResult;
@@ -363,7 +393,8 @@ public partial class MainWindow : Window
         DeleteColumnPositionTextBox.IsEnabled = !isBusy && hasResult;
         IgnoreCaseCheckBox.IsEnabled = !isBusy && hasResult;
         TrimHeaderWhitespaceCheckBox.IsEnabled = !isBusy && hasResult;
-        OutputPathTextBox.IsEnabled = !isBusy && hasResult;
+        ReplaceOriginalCheckBox.IsEnabled = !isBusy && hasResult;
+        OutputPathTextBox.IsEnabled = !isBusy && hasResult && ReplaceOriginalCheckBox.IsChecked != true;
     }
 
     private void UpdateProgress(ProgressInfo progress)
@@ -385,9 +416,7 @@ public partial class MainWindow : Window
         DelimiterTextBlock.Text = $"分隔符號：{result.DelimiterName}";
         HeaderTextBlock.Text = $"標題列：{(result.HasHeader ? "第一列是欄位標題" : "無標題列，使用暫時欄名")}";
         RowsIncludingHeaderTextBlock.Text = $"資料列數（含標題）：{result.TotalRowsIncludingHeader:N0}";
-        DataRowsTextBlock.Text = result.HasHeader
-            ? $"資料列數（不含標題）：{result.DataRows:N0}"
-            : "資料列數（不含標題）：不適用";
+        DataRowsTextBlock.Text = result.HasHeader ? $"資料列數（不含標題）：{result.DataRows:N0}" : "資料列數（不含標題）：不適用";
         FieldCountTextBlock.Text = $"欄位數：{result.FieldCount:N0}";
         StatusTextBlock.Text = $"狀態：{result.StatusMessage}";
         ColumnsListView.ItemsSource = result.Columns;
@@ -421,14 +450,6 @@ public partial class MainWindow : Window
         }
 
         return ",";
-    }
-
-    private void EnsureOutputPath(string operationName)
-    {
-        if (_currentResult is not null && string.IsNullOrWhiteSpace(OutputPathTextBox.Text))
-        {
-            OutputPathTextBox.Text = GenerateDefaultOutputPath(_currentResult.FilePath, operationName);
-        }
     }
 
     private static string GenerateDefaultOutputPath(string inputPath, string operationName)
