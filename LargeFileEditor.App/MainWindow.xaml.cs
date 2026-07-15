@@ -53,10 +53,17 @@ public partial class MainWindow : Window
 
     private void ColumnsListView_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        if (ColumnsListView.SelectedItem is ColumnInfo column)
+        if (ColumnsListView.SelectedItems.Count == 1 && ColumnsListView.SelectedItem is ColumnInfo column)
         {
             DeleteColumnHeaderTextBox.Text = column.Header;
             DeleteColumnPositionTextBox.Text = column.Position.ToString();
+        }
+        else if (ColumnsListView.SelectedItems.Count > 1)
+        {
+            DeleteColumnHeaderTextBox.Text = string.Empty;
+            DeleteColumnPositionTextBox.Text = string.Join(
+                ",",
+                ColumnsListView.SelectedItems.Cast<ColumnInfo>().Select(column => column.Position));
         }
     }
 
@@ -214,8 +221,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        var selectedColumnIndexes = ColumnsListView.SelectedItems
+            .Cast<ColumnInfo>()
+            .Select(column => column.Index)
+            .Distinct()
+            .Order()
+            .ToArray();
+
         int? zeroBasedColumnIndex = null;
-        if (!string.IsNullOrWhiteSpace(DeleteColumnPositionTextBox.Text))
+        if (selectedColumnIndexes.Length == 0 && !string.IsNullOrWhiteSpace(DeleteColumnPositionTextBox.Text))
         {
             if (!int.TryParse(DeleteColumnPositionTextBox.Text, out int oneBasedPosition) || oneBasedPosition <= 0)
             {
@@ -227,9 +241,9 @@ public partial class MainWindow : Window
         }
 
         string header = DeleteColumnHeaderTextBox.Text;
-        if (zeroBasedColumnIndex is null && string.IsNullOrWhiteSpace(header))
+        if (selectedColumnIndexes.Length == 0 && zeroBasedColumnIndex is null && string.IsNullOrWhiteSpace(header))
         {
-            MessageBox.Show(this, "請輸入欄位標題，或指定欄位位置。", "欄位設定不足", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, "請在清單選取欄位，或輸入欄位標題/欄位位置。", "欄位設定不足", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -239,7 +253,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (zeroBasedColumnIndex is null && FindHeaderMatches(header).Count > 1)
+        if (selectedColumnIndexes.Length == 0 && zeroBasedColumnIndex is null && FindHeaderMatches(header).Count > 1)
         {
             MessageBox.Show(this, "存在多個同名欄位，請在清單中選取實際欄位或輸入欄位位置。", "同名欄位", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -257,6 +271,7 @@ public partial class MainWindow : Window
             Columns = _currentResult.Columns,
             HeaderName = string.IsNullOrWhiteSpace(header) ? null : header,
             ColumnIndex = zeroBasedColumnIndex,
+            ColumnIndexes = selectedColumnIndexes,
             IgnoreCase = IgnoreCaseCheckBox.IsChecked == true,
             TrimHeaderWhitespace = TrimHeaderWhitespaceCheckBox.IsChecked == true
         };
@@ -264,7 +279,9 @@ public partial class MainWindow : Window
         _currentOperation?.Dispose();
         _currentOperation = new CancellationTokenSource();
         SetBusy(true);
-        AddLog(zeroBasedColumnIndex is null ? $"開始刪除欄位「{header}」" : $"開始刪除第 {zeroBasedColumnIndex.Value + 1:N0} 欄");
+        AddLog(selectedColumnIndexes.Length > 0
+            ? $"開始刪除 {selectedColumnIndexes.Length:N0} 個選取欄位"
+            : zeroBasedColumnIndex is null ? $"開始刪除欄位「{header}」" : $"開始刪除第 {zeroBasedColumnIndex.Value + 1:N0} 欄");
 
         try
         {
@@ -281,7 +298,7 @@ public partial class MainWindow : Window
             }
 
             string scanPath = CompleteOutputMode(operation.OutputFilePath, finalTarget);
-            AddLog($"欄位刪除完成：第 {operation.DeletedColumnIndex.GetValueOrDefault() + 1:N0} 欄 {operation.DeletedColumnName}");
+            AddLog($"欄位刪除完成：{operation.ColumnsDeleted:N0} 個欄位 ({operation.DeletedColumnName})");
             AddLog($"檔案大小變化：{FileAnalysisService.FormatFileSize(operation.OriginalSizeBytes)} -> {FileAnalysisService.FormatFileSize(operation.NewSizeBytes)}");
             OutputPathTextBox.Text = GenerateDefaultOutputPath(scanPath, "output");
             await StartScanAsync(scanPath);

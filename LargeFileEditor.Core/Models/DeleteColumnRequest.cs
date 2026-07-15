@@ -12,6 +12,7 @@ public sealed class DeleteColumnRequest
     public IReadOnlyList<ColumnInfo> Columns { get; init; } = Array.Empty<ColumnInfo>();
     public string? HeaderName { get; init; }
     public int? ColumnIndex { get; init; }
+    public IReadOnlyList<int> ColumnIndexes { get; init; } = Array.Empty<int>();
     public bool IgnoreCase { get; init; }
     public bool TrimHeaderWhitespace { get; init; }
 }

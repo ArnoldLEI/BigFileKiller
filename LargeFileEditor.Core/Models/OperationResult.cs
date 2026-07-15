@@ -10,6 +10,7 @@ public sealed class OperationResult
     public int ColumnsDeleted { get; init; }
     public string DeletedColumnName { get; init; } = string.Empty;
     public int? DeletedColumnIndex { get; init; }
+    public IReadOnlyList<int> DeletedColumnIndexes { get; init; } = Array.Empty<int>();
     public long OriginalSizeBytes { get; init; }
     public long NewSizeBytes { get; init; }
 }

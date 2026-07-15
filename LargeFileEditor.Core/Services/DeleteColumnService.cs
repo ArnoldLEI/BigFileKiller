@@ -22,13 +22,14 @@ public sealed class DeleteColumnService
 
         if (string.Equals(inputInfo.FullName, outputFullPath, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("第三階段僅支援另存新檔，輸出路徑不可與原始檔相同。原始檔未被修改。");
+            throw new InvalidOperationException("輸出路徑不可與原始檔相同。原始檔未被修改。");
         }
 
         FileReplacementService.EnsureAvailableSpace(outputFullPath, inputInfo.Length);
 
-        int deleteIndex = ResolveDeleteIndex(request);
-        string deletedName = ResolveDeletedName(request, deleteIndex);
+        var deleteIndexes = ResolveDeleteIndexes(request);
+        var deleteIndexSet = deleteIndexes.ToHashSet();
+        string deletedNames = ResolveDeletedNames(request, deleteIndexes);
         long rowsWritten = 0;
 
         progress?.Report(new ProgressInfo
@@ -68,7 +69,7 @@ public sealed class DeleteColumnService
                     break;
                 }
 
-                var fields = RemoveColumn(record.Fields, deleteIndex);
+                var fields = RemoveColumns(record.Fields, deleteIndexSet);
                 await DelimitedFileWriter.WriteRecordAsync(writer, fields, request.Delimiter, cancellationToken).ConfigureAwait(false);
                 rowsWritten++;
 
@@ -76,7 +77,7 @@ public sealed class DeleteColumnService
                 {
                     progress?.Report(new ProgressInfo
                     {
-                        Status = $"正在刪除第 {deleteIndex + 1:N0} 欄",
+                        Status = $"正在刪除 {deleteIndexes.Count:N0} 個欄位",
                         BytesRead = Math.Min(countingStream.BytesRead, inputInfo.Length),
                         TotalBytes = inputInfo.Length,
                         LogicalRowsScanned = rowsWritten
@@ -124,11 +125,12 @@ public sealed class DeleteColumnService
         return new OperationResult
         {
             Succeeded = true,
-            Message = $"已刪除第 {deleteIndex + 1:N0} 欄，輸出至新檔案。",
+            Message = $"已刪除 {deleteIndexes.Count:N0} 個欄位，輸出至新檔案。",
             OutputFilePath = outputInfo.FullName,
-            ColumnsDeleted = 1,
-            DeletedColumnName = deletedName,
-            DeletedColumnIndex = deleteIndex,
+            ColumnsDeleted = deleteIndexes.Count,
+            DeletedColumnName = deletedNames,
+            DeletedColumnIndex = deleteIndexes.Count == 1 ? deleteIndexes[0] : null,
+            DeletedColumnIndexes = deleteIndexes,
             OriginalSizeBytes = inputInfo.Length,
             NewSizeBytes = outputInfo.Length
         };
@@ -146,22 +148,26 @@ public sealed class DeleteColumnService
             throw new ArgumentException("請指定輸出檔案路徑。", nameof(request));
         }
 
-        if (request.ColumnIndex is null && string.IsNullOrWhiteSpace(request.HeaderName))
+        if (request.ColumnIndexes.Count == 0 && request.ColumnIndex is null && string.IsNullOrWhiteSpace(request.HeaderName))
         {
-            throw new ArgumentException("請指定欄位標題或欄位位置。", nameof(request));
+            throw new ArgumentException("請指定欄位標題、欄位位置，或選取至少一個欄位。", nameof(request));
         }
     }
 
-    private static int ResolveDeleteIndex(DeleteColumnRequest request)
+    private static IReadOnlyList<int> ResolveDeleteIndexes(DeleteColumnRequest request)
     {
+        if (request.ColumnIndexes.Count > 0)
+        {
+            return request.ColumnIndexes
+                .Distinct()
+                .Order()
+                .Select(ValidateIndex)
+                .ToArray();
+        }
+
         if (request.ColumnIndex is int index)
         {
-            if (index < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(request), "欄位位置必須大於 0。原始檔未被修改。");
-            }
-
-            return index;
+            return [ValidateIndex(index)];
         }
 
         string wanted = NormalizeHeader(request.HeaderName ?? string.Empty, request.TrimHeaderWhitespace);
@@ -180,31 +186,40 @@ public sealed class DeleteColumnService
             throw new InvalidOperationException("存在多個同名欄位，請指定實際欄位位置。原始檔未被修改。");
         }
 
-        return matches[0].Index;
+        return [matches[0].Index];
     }
 
-    private static string ResolveDeletedName(DeleteColumnRequest request, int deleteIndex)
+    private static int ValidateIndex(int index)
     {
-        string? header = request.Columns.FirstOrDefault(column => column.Index == deleteIndex)?.Header;
-        if (!string.IsNullOrEmpty(header))
+        if (index < 0)
         {
-            return header;
+            throw new ArgumentOutOfRangeException(nameof(index), "欄位位置必須大於 0。原始檔未被修改。");
         }
 
-        return request.HeaderName ?? $"Column{deleteIndex + 1}";
+        return index;
     }
 
-    private static IReadOnlyList<string> RemoveColumn(IReadOnlyList<string> fields, int deleteIndex)
+    private static string ResolveDeletedNames(DeleteColumnRequest request, IReadOnlyList<int> deleteIndexes)
     {
-        if (deleteIndex >= fields.Count)
+        var names = deleteIndexes.Select(index =>
         {
-            return fields.ToArray();
+            string? header = request.Columns.FirstOrDefault(column => column.Index == index)?.Header;
+            return string.IsNullOrEmpty(header) ? $"Column{index + 1}" : header;
+        });
+        return string.Join(", ", names);
+    }
+
+    private static IReadOnlyList<string> RemoveColumns(IReadOnlyList<string> fields, HashSet<int> deleteIndexes)
+    {
+        if (fields.Count == 0)
+        {
+            return Array.Empty<string>();
         }
 
-        var output = new List<string>(Math.Max(0, fields.Count - 1));
+        var output = new List<string>(Math.Max(0, fields.Count - deleteIndexes.Count));
         for (int i = 0; i < fields.Count; i++)
         {
-            if (i != deleteIndex)
+            if (!deleteIndexes.Contains(i))
             {
                 output.Add(fields[i]);
             }

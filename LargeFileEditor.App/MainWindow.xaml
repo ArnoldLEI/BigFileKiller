@@ -93,7 +93,7 @@
             <Border Grid.Column="0" BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,12,0">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="欄位標題清單" FontWeight="SemiBold" Margin="0,0,0,8" />
-                    <ListView x:Name="ColumnsListView" SelectionChanged="ColumnsListView_SelectionChanged">
+                    <ListView x:Name="ColumnsListView" SelectionMode="Extended" SelectionChanged="ColumnsListView_SelectionChanged">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="欄位位置" Width="90" DisplayMemberBinding="{Binding Position}" />
@@ -150,7 +150,7 @@
                     <CheckBox x:Name="ReplaceOriginalCheckBox" Content="完成後取代原始檔" Margin="0,0,18,0" Checked="ReplaceOriginalCheckBox_Changed" Unchecked="ReplaceOriginalCheckBox_Changed" />
                     <CheckBox x:Name="IgnoreCaseCheckBox" Content="標題比對忽略英文大小寫" Margin="0,0,18,0" />
                     <CheckBox x:Name="TrimHeaderWhitespaceCheckBox" Content="忽略標題前後空白" Margin="0,0,18,0" />
-                    <TextBlock Text="預設另存新檔；取代原始檔會先建立 .backup 備份。欄位位置從第 1 欄開始；同名欄位必須指定位置。" />
+                    <TextBlock Text="可在欄位清單按 Ctrl/Shift 複選多欄後一次刪除。預設另存新檔；取代原始檔會先建立 .backup 備份。" />
                 </StackPanel>
             </Grid>
         </Border>

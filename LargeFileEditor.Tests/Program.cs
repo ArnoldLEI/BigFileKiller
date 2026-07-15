@@ -28,6 +28,8 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Duplicate header requires position", TestDuplicateHeaderRequiresPosition),
     ("Duplicate header can delete selected position", TestDuplicateHeaderByPosition),
     ("Delete column preserves quoted CSV output", TestDeleteColumnQuotesOutput),
+    ("Delete multiple selected columns", TestDeleteMultipleSelectedColumns),
+    ("Delete multiple non-adjacent columns", TestDeleteMultipleNonAdjacentColumns),
     ("Cancel column delete removes incomplete output", TestDeleteColumnCancellation),
     ("Replace original keeps backup", TestReplaceOriginalKeepsBackup),
     ("Replace original can delete backup", TestReplaceOriginalDeletesBackup)
@@ -317,6 +319,25 @@ static async Task TestDeleteColumnQuotesOutput()
     Assert(content.Contains("\"say \"\"hi\"\"\",\"line\r\nbreak\""), "Quote and newline fields should remain valid CSV.");
 }
 
+static async Task TestDeleteMultipleSelectedColumns()
+{
+    string input = await WriteTempAsync("A,B,C,D\r\n1,2,3,4\r\n5,6,7,8\r\n", new UTF8Encoding(false));
+    string output = NextTempPath();
+    var analysis = await AnalyzeAsync(input, ',', hasHeader: true);
+    var operation = await DeleteColumnsAsync(input, output, analysis.Columns, [0, 2]);
+    AssertEqual(2, operation.ColumnsDeleted);
+    AssertEqual("B,D\r\n2,4\r\n6,8\r\n", await File.ReadAllTextAsync(output));
+}
+
+static async Task TestDeleteMultipleNonAdjacentColumns()
+{
+    string input = await WriteTempAsync("A,B,C,D,E\r\n1,2,3,4,5\r\n", new UTF8Encoding(false));
+    string output = NextTempPath();
+    var analysis = await AnalyzeAsync(input, ',', hasHeader: true);
+    await DeleteColumnsAsync(input, output, analysis.Columns, [1, 3, 4]);
+    AssertEqual("A,C\r\n1,3\r\n", await File.ReadAllTextAsync(output));
+}
+
 static async Task TestDeleteColumnCancellation()
 {
     string input = await WriteTempAsync("A,B\r\n1,2\r\n", new UTF8Encoding(false));
@@ -419,6 +440,26 @@ static Task<LargeFileEditor.Core.Models.OperationResult> DeleteColumnAsync(
         Columns = columns,
         HeaderName = header,
         ColumnIndex = columnIndex
+    };
+
+    return new DeleteColumnService().DeleteColumnAsync(request, null, CancellationToken.None);
+}
+
+static Task<LargeFileEditor.Core.Models.OperationResult> DeleteColumnsAsync(
+    string input,
+    string output,
+    IReadOnlyList<LargeFileEditor.Core.Models.ColumnInfo> columns,
+    IReadOnlyList<int> columnIndexes)
+{
+    var request = new LargeFileEditor.Core.Models.DeleteColumnRequest
+    {
+        InputFilePath = input,
+        OutputFilePath = output,
+        Delimiter = ',',
+        Encoding = new UTF8Encoding(false),
+        HasHeader = true,
+        Columns = columns,
+        ColumnIndexes = columnIndexes
     };
 
     return new DeleteColumnService().DeleteColumnAsync(request, null, CancellationToken.None);
