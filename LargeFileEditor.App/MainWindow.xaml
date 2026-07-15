@@ -4,11 +4,11 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="大型資料檔案編輯工具 - 第二階段"
-        Height="840"
-        Width="1220"
-        MinHeight="740"
-        MinWidth="1040">
+        Title="大型資料檔案編輯工具 - 第三階段"
+        Height="900"
+        Width="1240"
+        MinHeight="780"
+        MinWidth="1080">
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -93,7 +93,7 @@
             <Border Grid.Column="0" BorderBrush="#D0D7DE" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,12,0">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="欄位標題清單" FontWeight="SemiBold" Margin="0,0,0,8" />
-                    <ListView x:Name="ColumnsListView">
+                    <ListView x:Name="ColumnsListView" SelectionChanged="ColumnsListView_SelectionChanged">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="欄位位置" Width="90" DisplayMemberBinding="{Binding Position}" />
@@ -120,10 +120,13 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="130" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="170" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -133,11 +136,21 @@
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="要刪除的資料列：" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <TextBox x:Name="DeleteRowNumberTextBox" Grid.Row="0" Grid.Column="1" Height="30" VerticalContentAlignment="Center" />
                 <TextBlock Grid.Row="0" Grid.Column="2" Text="輸出檔案：" VerticalAlignment="Center" Margin="12,0,6,0" />
-                <TextBox x:Name="OutputPathTextBox" Grid.Row="0" Grid.Column="3" Height="30" VerticalContentAlignment="Center" />
-                <Button x:Name="BrowseOutputButton" Grid.Row="0" Grid.Column="4" Width="80" Height="30" Margin="8,0,0,0" Content="瀏覽" Click="BrowseOutputButton_Click" IsEnabled="False" />
-                <Button x:Name="DeleteRowButton" Grid.Row="0" Grid.Column="5" Width="110" Height="30" Margin="8,0,0,0" Content="刪除資料列" Click="DeleteRowButton_Click" IsEnabled="False" />
+                <TextBox x:Name="OutputPathTextBox" Grid.Row="0" Grid.Column="3" Grid.ColumnSpan="3" Height="30" VerticalContentAlignment="Center" />
+                <Button x:Name="BrowseOutputButton" Grid.Row="0" Grid.Column="6" Width="80" Height="30" Margin="8,0,0,0" Content="瀏覽" Click="BrowseOutputButton_Click" IsEnabled="False" />
+                <Button x:Name="DeleteRowButton" Grid.Row="0" Grid.Column="7" Width="110" Height="30" Margin="8,0,0,0" Content="刪除資料列" Click="DeleteRowButton_Click" IsEnabled="False" />
 
-                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="6" Margin="0,8,0,0" Text="列號從 1 開始；若第一列是欄位標題，刪除列號預設指資料內容列，不包含標題列。第二階段僅支援另存新檔。" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="欄位標題：" VerticalAlignment="Center" Margin="0,8,6,0" />
+                <TextBox x:Name="DeleteColumnHeaderTextBox" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Height="30" Margin="0,8,0,0" VerticalContentAlignment="Center" />
+                <TextBlock Grid.Row="1" Grid.Column="4" Text="欄位位置：" VerticalAlignment="Center" Margin="12,8,6,0" />
+                <TextBox x:Name="DeleteColumnPositionTextBox" Grid.Row="1" Grid.Column="5" Height="30" Margin="0,8,0,0" VerticalContentAlignment="Center" />
+                <Button x:Name="DeleteColumnButton" Grid.Row="1" Grid.Column="7" Width="110" Height="30" Margin="8,8,0,0" Content="刪除欄位" Click="DeleteColumnButton_Click" IsEnabled="False" />
+
+                <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="8" Orientation="Horizontal" Margin="0,8,0,0">
+                    <CheckBox x:Name="IgnoreCaseCheckBox" Content="標題比對忽略英文大小寫" Margin="0,0,18,0" />
+                    <CheckBox x:Name="TrimHeaderWhitespaceCheckBox" Content="忽略標題前後空白" Margin="0,0,18,0" />
+                    <TextBlock Text="列號從 1 開始；若第一列是欄位標題，刪除列號指資料內容列。欄位位置從第 1 欄開始；同名欄位必須指定位置。" />
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

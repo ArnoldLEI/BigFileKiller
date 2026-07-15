@@ -20,7 +20,15 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Delete middle data row", TestDeleteMiddleDataRow),
     ("Delete last data row", TestDeleteLastDataRow),
     ("Delete missing data row fails safely", TestDeleteMissingDataRow),
-    ("Cancel row delete removes incomplete output", TestDeleteCancellation)
+    ("Cancel row delete removes incomplete output", TestDeleteCancellation),
+    ("Delete column by header", TestDeleteColumnByHeader),
+    ("Delete column by position", TestDeleteColumnByPosition),
+    ("Delete first column", TestDeleteFirstColumn),
+    ("Delete last column", TestDeleteLastColumn),
+    ("Duplicate header requires position", TestDuplicateHeaderRequiresPosition),
+    ("Duplicate header can delete selected position", TestDuplicateHeaderByPosition),
+    ("Delete column preserves quoted CSV output", TestDeleteColumnQuotesOutput),
+    ("Cancel column delete removes incomplete output", TestDeleteColumnCancellation)
 };
 
 int failed = 0;
@@ -234,6 +242,105 @@ static async Task TestDeleteCancellation()
     AssertEqual(before, await File.ReadAllTextAsync(input));
 }
 
+static async Task TestDeleteColumnByHeader()
+{
+    string input = await WriteTempAsync("Id,Name,Dept\r\n1,A,IT\r\n2,B,Sales\r\n", new UTF8Encoding(false));
+    string output = NextTempPath();
+    var analysis = await AnalyzeAsync(input, ',', hasHeader: true);
+    await DeleteColumnAsync(input, output, analysis.Columns, header: "Id", columnIndex: null);
+    AssertEqual("Name,Dept\r\nA,IT\r\nB,Sales\r\n", await File.ReadAllTextAsync(output));
+}
+
+static async Task TestDeleteColumnByPosition()
+{
+    string input = await WriteTempAsync("Id,Name,Dept\r\n1,A,IT\r\n", new UTF8Encoding(false));
+    string output = NextTempPath();
+    var analysis = await AnalyzeAsync(input, ',', hasHeader: true);
+    await DeleteColumnAsync(input, output, analysis.Columns, header: null, columnIndex: 1);
+    AssertEqual("Id,Dept\r\n1,IT\r\n", await File.ReadAllTextAsync(output));
+}
+
+static async Task TestDeleteFirstColumn()
+{
+    string input = await WriteTempAsync("A,B,C\r\n1,2,3\r\n", new UTF8Encoding(false));
+    string output = NextTempPath();
+    var analysis = await AnalyzeAsync(input, ',', hasHeader: true);
+    await DeleteColumnAsync(input, output, analysis.Columns, header: null, columnIndex: 0);
+    AssertEqual("B,C\r\n2,3\r\n", await File.ReadAllTextAsync(output));
+}
+
+static async Task TestDeleteLastColumn()
+{
+    string input = await WriteTempAsync("A,B,C\r\n1,2,3\r\n", new UTF8Encoding(false));
+    string output = NextTempPath();
+    var analysis = await AnalyzeAsync(input, ',', hasHeader: true);
+    await DeleteColumnAsync(input, output, analysis.Columns, header: null, columnIndex: 2);
+    AssertEqual("A,B\r\n1,2\r\n", await File.ReadAllTextAsync(output));
+}
+
+static async Task TestDuplicateHeaderRequiresPosition()
+{
+    string input = await WriteTempAsync("A,B,A\r\n1,2,3\r\n", new UTF8Encoding(false));
+    string output = NextTempPath();
+    var analysis = await AnalyzeAsync(input, ',', hasHeader: true);
+
+    try
+    {
+        await DeleteColumnAsync(input, output, analysis.Columns, header: "A", columnIndex: null);
+        throw new InvalidOperationException("Expected duplicate header failure.");
+    }
+    catch (InvalidOperationException)
+    {
+        Assert(!File.Exists(output), "Output should not be created when duplicate header is ambiguous.");
+    }
+}
+
+static async Task TestDuplicateHeaderByPosition()
+{
+    string input = await WriteTempAsync("A,B,A\r\n1,2,3\r\n", new UTF8Encoding(false));
+    string output = NextTempPath();
+    var analysis = await AnalyzeAsync(input, ',', hasHeader: true);
+    await DeleteColumnAsync(input, output, analysis.Columns, header: null, columnIndex: 2);
+    AssertEqual("A,B\r\n1,2\r\n", await File.ReadAllTextAsync(output));
+}
+
+static async Task TestDeleteColumnQuotesOutput()
+{
+    string input = await WriteTempAsync("Id,Note,Dept\r\n1,\"hello,world\",IT\r\n2,\"say \"\"hi\"\"\",\"line\r\nbreak\"\r\n", new UTF8Encoding(false));
+    string output = NextTempPath();
+    var analysis = await AnalyzeAsync(input, ',', hasHeader: true);
+    await DeleteColumnAsync(input, output, analysis.Columns, header: "Id", columnIndex: null);
+    string content = await File.ReadAllTextAsync(output);
+    Assert(content.Contains("\"hello,world\",IT"), "Comma field should remain quoted.");
+    Assert(content.Contains("\"say \"\"hi\"\"\",\"line\r\nbreak\""), "Quote and newline fields should remain valid CSV.");
+}
+
+static async Task TestDeleteColumnCancellation()
+{
+    string input = await WriteTempAsync("A,B\r\n1,2\r\n", new UTF8Encoding(false));
+    string before = await File.ReadAllTextAsync(input);
+    string output = NextTempPath();
+    var analysis = await AnalyzeAsync(input, ',', hasHeader: true);
+    using var cts = new CancellationTokenSource();
+    cts.Cancel();
+
+    var request = new LargeFileEditor.Core.Models.DeleteColumnRequest
+    {
+        InputFilePath = input,
+        OutputFilePath = output,
+        Delimiter = ',',
+        Encoding = new UTF8Encoding(false),
+        HasHeader = true,
+        Columns = analysis.Columns,
+        HeaderName = "A"
+    };
+
+    var operation = await new DeleteColumnService().DeleteColumnAsync(request, null, cts.Token);
+    Assert(operation.Canceled, "Operation should report cancellation.");
+    Assert(!File.Exists(output), "Incomplete output should be removed.");
+    AssertEqual(before, await File.ReadAllTextAsync(input));
+}
+
 static Task<LargeFileEditor.Core.Models.OperationResult> DeleteRowAsync(
     string input,
     string output,
@@ -252,6 +359,28 @@ static Task<LargeFileEditor.Core.Models.OperationResult> DeleteRowAsync(
     };
 
     return new DeleteRowService().DeleteSingleRowAsync(request, null, CancellationToken.None);
+}
+
+static Task<LargeFileEditor.Core.Models.OperationResult> DeleteColumnAsync(
+    string input,
+    string output,
+    IReadOnlyList<LargeFileEditor.Core.Models.ColumnInfo> columns,
+    string? header,
+    int? columnIndex)
+{
+    var request = new LargeFileEditor.Core.Models.DeleteColumnRequest
+    {
+        InputFilePath = input,
+        OutputFilePath = output,
+        Delimiter = ',',
+        Encoding = new UTF8Encoding(false),
+        HasHeader = true,
+        Columns = columns,
+        HeaderName = header,
+        ColumnIndex = columnIndex
+    };
+
+    return new DeleteColumnService().DeleteColumnAsync(request, null, CancellationToken.None);
 }
 
 static Task<LargeFileEditor.Core.Models.FileAnalysisResult> AnalyzeAsync(
